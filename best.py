@@ -115,11 +115,28 @@ class Import:
 			elif os.path.splitext(fullpath)[1].lower() in tag.supported_extensions:
 				tags = tag.read_tags(fullpath)
 				sql = "insert into best values (?,?,?,?,?,?,?,?)"
-				args = (tags[tag.ARTIST], tags[tag.ALBUM], tags[tag.TITLE],
-					tags[tag.YEAR], tags[tag.ARTIST_ID], tags[tag.ALBUM_ID], tags[tag.TRACK_ID], fullpath)
+				args = self.get_args(tags, fullpath)
 				self.conn.execute(sql, args)
 
 		self.conn.commit()
+
+	def get_args(self, tags, fullpath):
+		return (
+			self.get_single_tag(tags, tag.ARTIST),
+			self.get_single_tag(tags, tag.ALBUM),
+			self.get_single_tag(tags, tag.TITLE),
+			self.get_single_tag(tags, tag.YEAR),
+			self.get_single_tag(tags, tag.ARTIST_ID),
+			self.get_single_tag(tags, tag.ALBUM_ID),
+			self.get_single_tag(tags, tag.TRACK_ID),
+			fullpath
+		)
+
+	def get_single_tag(self, tags, name):
+		if type(tags[name]) == type([]):
+			return tags[name][0]
+		else:
+			return tags[name]
 
 def usage():
 	print "usage: %s operation [-d] [dirs...]" % sys.argv[0]
