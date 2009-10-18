@@ -2,14 +2,12 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.expanduser("~/Projects/pylast"))
 sys.path.insert(0, os.path.expanduser("~/Projects/albumidentify"))
 import sqlite3
-import pylast
 import tag
 import time
+import lastfm
 
-LASTFMKEY = "<<YOUR KEY HERE>>"
 
 class Best:
 	def __init__(self):
@@ -34,10 +32,12 @@ class Best:
 					print row3[0]
 
 class Download:
-	def __init__(self):
+	def __init__(self, delete=False):
 		self.conn = sqlite3.connect("best.db")
 		self.create_db()
-		self.network = pylast.get_lastfm_network(api_key = LASTFMKEY)
+		if delete:
+			self.conn.execute("delete from top")
+			self.conn.commit()
 
 	def create_db(self):
 		sql = "CREATE TABLE IF NOT EXISTS top ( \
@@ -51,31 +51,26 @@ class Download:
 	def download(self, artist_id=None):
 		c = self.conn.cursor()
 		if artist_id is None:
-			sql = "select distinct artist_id from best"
+			sql = "select distinct artist from best"
 			c.execute(sql)
 		else:
-			sql = "select distinct artist_id from best where artist_id=?"
+			sql = "select distinct artist from best where artist_id=?"
 			c.execute(sql, (artist_id,))
-		for mbid in c:
-			#print mbid[0]
-			time.sleep(1)
-			#print mbid
-			try:
-				artist = self.network.get_artist_by_mbid(mbid[0])
-			except pylast.WSError, e:
-				print "Error searching for artist, skipping"
-				continue
-			print "%s (%s)" % (artist, mbid[0])
-			lfma = pylast.Artist(artist, self.network)
+		for artist in c:
+			time.sleep(.5)
+			print artist[0]
 			rank = 1
-			ts = artist.get_top_tracks()
-			#print ts
-			for track in ts[:10]:
-				#print track
-				trname = track['item'].title
-				#print "*",trname
-				sql = "insert into top (artist_id, rank, title) values (?, ?, ?)"
-				self.conn.execute(sql, (mbid[0], rank, trname))
+			try:
+				ts = lastfm.get_artist_toptracks(artist[0])
+			except:
+				print " * Error download for artist, skipping"
+				continue
+			for track in ts['track'][:10]:
+				trname = track['name'][0]
+				mbid = track['artist'][0]['mbid'][0]
+				#print "*",trname,mbid
+				sql = "insert into top (artist, artist_id, rank, title) values (?, ?, ?, ?)"
+				self.conn.execute(sql, (artist[0], mbid, rank, trname))
 				rank += 1
 			self.conn.commit()
 
@@ -129,7 +124,7 @@ class Import:
 def usage():
 	print "usage: %s operation [-d] [dirs...]" % sys.argv[0]
 	print "operation: 'import', 'download' or 'generate'"
-	print "-d: delete db before import"
+	print "-d: delete db before import or download"
 	print "only provide dirs on import"
 
 
@@ -146,10 +141,14 @@ if __name__ == '__main__':
 			args = sys.argv[2:]
 		Import(delete).import_all(args)
 	elif sys.argv[1] == "download":
-		if len(sys.argv) == 3:
-			Download().download(sys.argv[2])
+		if len(sys.argv) > 2 and sys.argv[2] == "-d":
+			delete = True
 		else:
-			Download().download()
+			delete = False
+		if len(sys.argv) == 4:
+			Download(delete).download(sys.argv[3])
+		else:
+			Download(delete).download()
 	elif sys.argv[1] == "generate":
 		if len(sys.argv) == 3:
 			Best().best(sys.argv[2])
